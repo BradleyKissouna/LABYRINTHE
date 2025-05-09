@@ -2,8 +2,6 @@
 #include <fstream>
 #include <vector>
 #include <algorithm>
-#include <chrono>
-#include <thread>
 #include <set>
 
 
@@ -13,7 +11,7 @@ struct Position {
     int x, y;
 };
 
-struct LadderPosition {
+struct Ladder {
     int level;
     int x, y;
     int object;
@@ -21,12 +19,13 @@ struct LadderPosition {
 
 vector<vector<string>> mazes, solvedMazes;
 Position startPos,endPos;
-vector<vector<LadderPosition>> ladders;
+vector<vector<Ladder>> ladders;
 bool collected[3] = {false, false, false};
 
-// Directions possibles (haut, bas, gauche, droite)
+// Direction (haut, bas, gauche, droite)
 const int dx[] = {-1, 1, 0, 0};
 const int dy[] = {0, 0, -1, 1};
+// Objets du labyrinthe
 const char OBJECTS[3] = {'E', 'B', 'C'};
 
 // Charger les labyrinthes depuis un fichier
@@ -77,7 +76,7 @@ bool isValidMove(int x, int y, int level) {
 
 // Afficher le labyrinthe après résolution
 void displaySolvedMaze(int level) {
-    cout << "\n🧩 Display du labyrinthe (niveau " << level << "):\n";
+    cout << "\nDisplay du labyrinthe (niveau " << level << ") :\n";
     for (const auto& row : solvedMazes[level]) {  // Accéder au labyrinthe résolu
         for (char ch : row) {
             if (ch == '*') cout << "\033[31m*\033[0m";  // Affichage coloré pour les cases visitées
@@ -87,16 +86,10 @@ void displaySolvedMaze(int level) {
     }
 }
 
-// Simuler un délai pour faire une pause
-void waitFor(int seconds) {
-    std::this_thread::sleep_for(std::chrono::seconds(seconds));
-}
-
 // Résolution du labyrinthe
 bool solveMaze(int x, int y, int level) {
     if (level == (int)mazes.size() - 1 && x == endPos.x && y == endPos.y &&
         collected[0] && collected[1] && collected[2]) {
-        cout << "🎉 Tout les labyrinthes finis !\n";
         mazes[level][x][y] = '*';
         saveSolvedMaze(level);
         return true;
@@ -113,20 +106,15 @@ bool solveMaze(int x, int y, int level) {
         if (!collected[collectedIndex]) {
             collected[collectedIndex] = true;
             collectedHere = true;
-            cout << "📦 Objet " << temp << " récupéré au niveau " << level << endl;
         }
     }
 
     // TNT
     if (temp == 'T') {
         size_t posTab = mazes[level][x].find('\t');
-        if (posTab != string::npos && y < posTab) {
-            cout << "💥 TNT activée au niveau " << level 
-                 << " à (" << x << ", " << y << "). Passage vers la droite...\n";
-
+        if (posTab != string::npos && y < posTab) {;
             y = (int)posTab + 1 + y;
             endPos.y = (int)posTab + 1 + endPos.y;
-
             return solveMaze(x, y, level);
         }
         saveSolvedMaze(level);
@@ -144,11 +132,9 @@ bool solveMaze(int x, int y, int level) {
         }
     }
 
-    // Arrivée
+    // Echelle avec objet
     if (x == endPos.x && y == endPos.y && level + 1 < (int)mazes.size()) {
         if (collected[level]) {
-            cout << "🎉 Arrivée atteinte au niveau " << level 
-                 << " à (" << x << ", " << y << ") avec l'objet '" << OBJECTS[level] << "' ✅\n";
             saveSolvedMaze(level);
             return true;
         }
@@ -159,41 +145,36 @@ bool solveMaze(int x, int y, int level) {
     if (collectedHere) {
         collected[collectedIndex] = false;
     }
-
     return false;
 }
 
-
+// Init depart et arrivée
 void initializePositions(int level) {
-    bool startFound = false;
-    bool endFound = false;
+    bool startFound = false, endFound = false;
 
     // On commence à rechercher les positions
     for (int i = 0; i < mazes[level].size(); i++) {
-        // Trouve s'il y a un tab pour couper la ligne en 2
+        // Si il y a un espace on coupe la ligne en 2
         size_t posTab = mazes[level][i].find('\t');
         size_t maxJ = (posTab != string::npos) ? posTab : mazes[level][i].size();
 
         for (int j = 0; j < (int)maxJ; j++) {
             char cell = mazes[level][i][j];
 
-            // Si c'est le départ (D), on le sauvegarde
-            if (cell == 'D') {
+            if (cell == 'D') { // Départ
                 startPos = {i, j};
                 startFound = true;
             }
-            // Si c'est l'arrivée (A), on la sauvegarde
-            else if (cell == 'A') {
+            else if (cell == 'A') { // Arrivée
                 endPos = {i, j};
                 endFound = true;
             }
-            // Si on trouve un chiffre (échelle), on le sauvegarde
-            else if (isdigit(cell)) {
+            else if (isdigit(cell)) { // Echelle
                 ladders[level].push_back({level, i, j, cell});
             }
         }
     }
-
+    // Si on n'a pas trouvé l'arrivée ('A'), on utilise la première échelle si elle existe
     if (!startFound && !ladders[level].empty()) {
         startPos = {ladders[level][0].x, ladders[level][0].y};
         startFound = true;
@@ -216,39 +197,30 @@ void initializePositions(int level) {
 
 bool askContinue() {
     string response;
-    cout << "\n➡️  Passer au labyrinthe suivant ? (y/n): ";
+    cout << "\n- Passer au labyrinthe suivant ? (y/n): ";
     cin >> response;
     return (response == "y" || response == "Y");
 }
 
 int main() {
     loadLabyrinths("./labyrinthe.txt");
-    // for (const auto& row : mazes[1]) {  // Accéder au labyrinthe résolu
-    //     for (char ch : row) {
-    //         if (ch == '*') cout << "\033[31m*\033[0m";  // Affichage coloré pour les cases visitées
-    //         else cout << ch;
-    //     }
-    //     cout << endl;
-    // }
     for (int level = 0; level < mazes.size(); ++level) {
-
-        cout << "\n🎮 Labyrinthe niveau " << level << " :\n";
         initializePositions(level);
 
-        cout << "Départ : (" << startPos.x << "," << startPos.y << ") ";
+        cout << "Départ : (" << startPos.x << "," << startPos.y << ")";
         cout << " | Arrivée : (" << endPos.x << "," << endPos.y << ")\n";
 
         bool solved = solveMaze(startPos.x, startPos.y, level);
-        cout << solved << endl;
+
         if (solved) {
             displaySolvedMaze(level);
         } else {
-            cout << "❌ Impossible de résoudre le labyrinthe de niveau " << level << endl;
+            cout << "Impossible de résoudre le labyrinthe de niveau " << level << endl;
         }
 
         // Demander à l'utilisateur s'il veut continuer vers le niveau suivant
         if (level < (int)mazes.size() - 1 && !askContinue()) {
-            cout << "🔚 Fin de l'exécution.\n";
+            cout << "Exit.\n";
             break;
         }
     }

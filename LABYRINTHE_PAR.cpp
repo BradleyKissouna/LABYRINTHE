@@ -9,30 +9,31 @@
 
 using namespace std;
 
+
 struct Position {
     int x, y;
 };
 
+// Echelles
 struct Ladder {
     int level;
     int x, y;
     int object;
 };
 
-// Variables globales communes
 vector<vector<string>> mazes, solvedMazes;
 vector<vector<Ladder>> ladders;
-Position startPos, endPos;
-// Utilisés dans la Variante 1 (backtracking séquentiel)
+thread_local Position startPos, endPos;  // Utilisation de thread_local pour éviter les conflits
 bool collected[3] = {false, false, false};
 
+// Directions
 const int dx[] = {-1, 1, 0, 0};
 const int dy[] = {0, 0, -1, 1};
 const char OBJECTS[3] = {'E', 'B', 'C'};
 
-mutex mtx;  // Protège l'accès à solvedMazes
+mutex mtx;
 
-// --- Chargement du labyrinthe ---
+// Chargement des labyrinthes depuis un fichier texte
 void loadLabyrinths(const string &filename) {
     ifstream file(filename);
     if (!file) {
@@ -56,21 +57,22 @@ void loadLabyrinths(const string &filename) {
     file.close();
     
     ladders.resize(mazes.size());
-    solvedMazes = mazes; // On initialise solvedMazes avec l'état initial
+    solvedMazes = mazes;
 }
 
-// --- Sauvegarde et affichage ---
+// Sauvegarde
 void saveSolvedMaze(int level, const vector<string> &maze) {
     lock_guard<mutex> lock(mtx);
     solvedMazes[level] = maze;
 }
 
+// Affichage 
 void displaySolvedMaze(int level) {
-    cout << "\nLabyrinthe (niveau " << level << ") résolu :\n";
+    cout << "\nLabyrinthe (niveau " << level << ") r\x82solu :\n";
     for (const auto &row : solvedMazes[level]) {
         for (char ch : row) {
             if (ch == '*')
-                cout << "\033[32m*\033[0m"; // Chemin en vert
+                cout << "\033[32m*\033[0m";
             else
                 cout << ch;
         }
@@ -78,7 +80,6 @@ void displaySolvedMaze(int level) {
     }
 }
 
-// --- Vérifier un mouvement dans un labyrinthe donné ---
 bool isValidMove(int x, int y, int level, const vector<string>& maze) {
     return (x >= 0 && x < maze.size() &&
             y >= 0 && y < maze[0].size() &&
@@ -87,19 +88,19 @@ bool isValidMove(int x, int y, int level, const vector<string>& maze) {
             maze[x][y] != '*');
 }
 
-// ---------------------
-// Variante 1 : Backtracking séquentiel par labyrinthe
+//Exo 1
 bool solveMaze(int x, int y, int level) {
     if (mazes[level][x][y] == 'A' && collected[0] && collected[1] && collected[2]) {
         mazes[level][x][y] = '*';
         saveSolvedMaze(level, mazes[level]);
         return true;
     }
-    
+
     char temp = mazes[level][x][y];
     bool collectedHere = false;
     int collectedIndex = -1;
-    
+
+    // Objet
     auto object = find(begin(OBJECTS), end(OBJECTS), temp);
     if (object != end(OBJECTS)) {
         collectedIndex = distance(begin(OBJECTS), object);
@@ -108,20 +109,22 @@ bool solveMaze(int x, int y, int level) {
             collectedHere = true;
         }
     }
-    
-    // Gestion du TNT (Variante 1) : si on rencontre 'T', on téléporte
+
+    // TNT
     if (temp == 'T') {
         size_t posTab = mazes[level][x].find('\t');
         if (posTab != string::npos && y < posTab) {
-            y = (int)posTab + 1 + y;
+            y = (int)(posTab + 1 + y);
+            endPos.y = (int)posTab + 1 + endPos.y;
+            cout << "Teortation de (" << x << ", " << y << ") \xE0 (" << x << ", " << y << ")\n";
             return solveMaze(x, y, level);
         }
         saveSolvedMaze(level, mazes[level]);
         return true;
     }
-    
+
     mazes[level][x][y] = '*';
-    
+
     for (int i = 0; i < 4; ++i) {
         int nx = x + dx[i], ny = y + dy[i];
         if (isValidMove(nx, ny, level, mazes[level])) {
@@ -129,18 +132,21 @@ bool solveMaze(int x, int y, int level) {
                 return true;
         }
     }
-    
+
+    // Passage à l'étage supérieur si on atteint la fin
     if (x == endPos.x && y == endPos.y && level + 1 < (int)mazes.size()) {
         saveSolvedMaze(level, mazes[level]);
         return true;
     }
-    
+
+    // Backtrack
     mazes[level][x][y] = temp;
     if (collectedHere)
         collected[collectedIndex] = false;
     return false;
 }
 
+// Recherche du départ et de l'arrivée
 void initializePositions(int level) {
     bool startFound = false, endFound = false;
     for (int i = 0; i < mazes[level].size(); ++i) {
@@ -159,136 +165,56 @@ void initializePositions(int level) {
             }
         }
     }
-    // Si on n'a pas trouvé l'arrivée ('A'), on utilise la première échelle si elle existe
-    if (!startFound && !ladders[level].empty()) {
-        startPos = {ladders[level][0].x, ladders[level][0].y};
-        startFound = true;
-    }
 
-    // Si on n'a pas trouvé l'arrivée ('A'), on utilise la deuxième échelle si elle existe
+    // Valeurs par défaut
+    if (!startFound && !ladders[level].empty())
+        startPos = {ladders[level][0].x, ladders[level][0].y};
+
     if (!endFound && !ladders[level].empty()) {
-        // Si la deuxième échelle existe, on l'utilise pour l'arrivée
-        if (ladders[level].size() > 1) {
-            endPos = {ladders[level][1].x, ladders[level][1].y};
-            endFound = true;
-        }
-        // Si l'échelle est la seule trouvée, on utilise la même pour l'arrivée
-        else {
-            endPos = {ladders[level][0].x, ladders[level][0].y};
-            endFound = true;
-        }
+        endPos = ladders[level].size() > 1 ? Position{ladders[level][1].x, ladders[level][1].y} : Position{ladders[level][0].x, ladders[level][0].y};
     }
 }
 
-// Fonction de résolution pour la Variante 1
 void solveLabyrinth_V1(int level) {
     initializePositions(level);
+    cout << "Depart level " << level << " : (" << startPos.x << "," << startPos.y << ") | Arriver : (" << endPos.x << "," << endPos.y << ")\n";
     if (!solveMaze(startPos.x, startPos.y, level)) {
         lock_guard<mutex> lock(mtx);
-        solvedMazes[level] = { "Impossible de résoudre le labyrinthe de niveau " + to_string(level) };
-    }
-}
-
-// ---------------------
-// Variante 2 : Backtracking parallèle intra-labyrinthe
-// Chaque appel lance 4 threads pour explorer simultanément les directions, en travaillant sur des copies locales.
-bool solveMazeParallel(int x, int y, int level, vector<string> maze, bool localCollected[3]) {
-    if (maze[x][y] == 'A' && localCollected[0] && localCollected[1] && localCollected[2]) {
-        maze[x][y] = '*';
-        saveSolvedMaze(level, maze);
-        return true;
-    }
-    
-    char temp = maze[x][y];
-    bool collectedHere = false;
-    int collectedIndex = -1;
-    auto object = find(begin(OBJECTS), end(OBJECTS), temp);
-    if (object != end(OBJECTS)) {
-        collectedIndex = distance(begin(OBJECTS), object);
-        if (!localCollected[collectedIndex]) {
-            localCollected[collectedIndex] = true;
-            collectedHere = true;
-        }
-    }
-    
-    // Gestion du TNT : vérifie qu'on effectue bien une téléportation effective.
-    if (temp == 'T') {
-        size_t posTab = maze[x].find('\t');
-        if (posTab != string::npos && y < posTab) {
-            int newY = (int)posTab + 1 + y;
-            // Vérifier que newY est strictement supérieur à y pour éviter de rester bloqué.
-            if (newY <= y) {
-                // Si ce n'est pas le cas, on traite la cellule comme normale.
-            } else {
-                maze[x][y] = '*'; // Marquer la cellule pour éviter de revenir dessus
-                return solveMazeParallel(x, newY, level, maze, localCollected);
-            }
-        }
-    }
-    
-    maze[x][y] = '*';
-    
-    bool found = false;
-    vector<thread> threads;
-    mutex foundMutex;
-    
-    for (int i = 0; i < 4; ++i) {
-        int nx = x + dx[i], ny = y + dy[i];
-        if (isValidMove(nx, ny, level, maze)) {
-            threads.push_back(thread([=, &found, &foundMutex]() mutable {
-                vector<string> mazeCopy = maze;
-                bool collectedCopy[3];
-                memcpy(collectedCopy, localCollected, 3 * sizeof(bool));
-                if (solveMazeParallel(nx, ny, level, mazeCopy, collectedCopy)) {
-                    lock_guard<mutex> lock(foundMutex);
-                    found = true;
-                }
-            }));
-        }
-    }
-    
-    for (auto &t : threads)
-        t.join();
-    return found;
-}
-
-void solveLabyrinth_V2(int level) {
-    bool localCollected[3] = {false, false, false};
-    initializePositions(level);
-    if (!solveMazeParallel(startPos.x, startPos.y, level, mazes[level], localCollected)) {
-        lock_guard<mutex> lock(mtx);
-        solvedMazes[level] = { "Impossible de résoudre le labyrinthe de niveau " + to_string(level) };
+        solvedMazes[level] = { "Impossible de resoudre le labyrinthe de niveau " + to_string(level) };
     }
 }
 
 int main() {
+    mazes.clear();
+    solvedMazes.clear();
+    ladders.clear();
+
     loadLabyrinths("labyrinthe.txt");
-    
+
     int choice = 0;
-    cout << "Choix de la variante parallèle à utiliser :\n";
-    cout << "1. Parallélisation par labyrinthe (Variante 1)\n";
-    cout << "2. Parallélisation intra-labyrinthe (Variante 2)\n";
+    cout << "Choix de l'exo' :\n";
+    cout << "1. Exo 1\n";
+    cout << "2. Exo 2)\n";
     cout << "Votre choix : ";
     cin >> choice;
-    
+
     vector<thread> threads;
     if (choice == 1) {
         for (int level = 0; level < mazes.size(); ++level)
             threads.push_back(thread(solveLabyrinth_V1, level));
     } else if (choice == 2) {
-        for (int level = 0; level < mazes.size(); ++level)
-            threads.push_back(thread(solveLabyrinth_V2, level));
+        // TODO
     } else {
         cout << "Choix invalide.\n";
         return 1;
     }
-    
+
     for (auto &t : threads)
         t.join();
-    
-    // Affichage final de tous les labyrinthes dans l'ordre
+
+    // Affichage final
     for (int level = 0; level < solvedMazes.size(); ++level)
         displaySolvedMaze(level);
-    
+
     return 0;
 }

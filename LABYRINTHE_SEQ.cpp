@@ -22,10 +22,8 @@ Position startPos,endPos;
 vector<vector<Ladder>> ladders;
 bool collected[3] = {false, false, false};
 
-// Direction (haut, bas, gauche, droite)
 const int dx[] = {-1, 1, 0, 0};
 const int dy[] = {0, 0, -1, 1};
-// Objets du labyrinthe
 const char OBJECTS[3] = {'E', 'B', 'C'};
 
 // Charger les labyrinthes depuis un fichier
@@ -50,7 +48,7 @@ void loadLabyrinths(const string &filename) {
         }
     }
 
-    // Ajouter le dernier labyrinthe s'il y en a un en attente
+    // Ajouter le dernier labyrinthe
     if (!currentLab.empty()) {
         mazes.push_back(currentLab);
     }
@@ -61,10 +59,9 @@ void loadLabyrinths(const string &filename) {
 }
 
 void saveSolvedMaze(int level) {
-    solvedMazes[level] = mazes[level];  // Remplacer l'élément existant au niveau `level`
+    solvedMazes[level] = mazes[level];
 }
 
-// Vérifier si une position est valide
 bool isValidMove(int x, int y, int level) {
     return (x >= 0 && x < mazes[level].size() &&
             y >= 0 && y < mazes[level][0].size() &&
@@ -74,12 +71,12 @@ bool isValidMove(int x, int y, int level) {
 }
 
 
-// Afficher le labyrinthe après résolution
+// Afficher le labyrinthe
 void displaySolvedMaze(int level) {
     cout << "\nDisplay du labyrinthe (niveau " << level << ") :\n";
-    for (const auto& row : solvedMazes[level]) {  // Accéder au labyrinthe résolu
+    for (const auto& row : solvedMazes[level]) {
         for (char ch : row) {
-            if (ch == '*') cout << "\033[31m*\033[0m";  // Affichage coloré pour les cases visitées
+            if (ch == '*') cout << "\033[31m*\033[0m";
             else cout << ch;
         }
         cout << endl;
@@ -132,7 +129,7 @@ bool solveMaze(int x, int y, int level) {
         }
     }
 
-    // Echelle avec objet
+    // Echelle
     if (x == endPos.x && y == endPos.y && level + 1 < (int)mazes.size()) {
         if (collected[level]) {
             saveSolvedMaze(level);
@@ -152,9 +149,8 @@ bool solveMaze(int x, int y, int level) {
 void initializePositions(int level) {
     bool startFound = false, endFound = false;
 
-    // On commence à rechercher les positions
     for (int i = 0; i < mazes[level].size(); i++) {
-        // Si il y a un espace on coupe la ligne en 2
+        // Si il y a un espace je coupe la ligne en 2
         size_t posTab = mazes[level][i].find('\t');
         size_t maxJ = (posTab != string::npos) ? posTab : mazes[level][i].size();
 
